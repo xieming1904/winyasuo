@@ -38,7 +38,9 @@ namespace Unpack
         {
             this.InitializeComponent();
             Title = "Unpack";
-            App.WindowHandle = WindowNative.GetWindowHandle(this);
+            // App.WindowHandle is now set in App.xaml.cs after m_window is created and before Activate.
+            // If needed here for some reason before Activate, it might be an issue, but typically dialogs
+            // are shown after activation or from user interaction.
 
             FileListView.ItemsSource = CurrentItems;
             LoadInitialDirectory();
@@ -48,7 +50,70 @@ namespace Unpack
             MainContentGrid.DragOver += OnDragOverMainGrid;
             MainContentGrid.DragLeave += OnDragLeaveMainGrid;
             MainContentGrid.Drop += OnDropMainGrid;
+
+            this.Loaded += MainWindow_Loaded; // Check for CLI args after window is loaded
         }
+
+        private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (App.QueuedFilePathsForUI != null && App.QueuedFilePathsForUI.Any())
+            {
+                Debug.WriteLine("MainWindow_Loaded: Detected queued file paths from CLI for 'Add to Archive' UI.");
+                await LaunchCreateArchiveDialogWithFilePathsAsync(App.QueuedFilePathsForUI);
+                App.QueuedFilePathsForUI = null; // Clear after processing
+            }
+        }
+
+        public async Task LaunchCreateArchiveDialogWithFilePathsAsync(IEnumerable<string> filePaths)
+        {
+            if (filePaths == null || !filePaths.Any()) return;
+
+            var fileSystemItems = new List<FileSystemItem>();
+            foreach (var path in filePaths)
+            {
+                if (File.Exists(path))
+                {
+                    var fileInfo = new FileInfo(path);
+                    fileSystemItems.Add(new FileSystemItem(fileInfo.Name, fileInfo.FullName,
+                        (string.IsNullOrEmpty(fileInfo.Extension) ? "File" : fileInfo.Extension.TrimStart('.').ToUpperInvariant() + " File"),
+                        "\xE7C3", fileInfo.LastWriteTimeUtc, fileInfo.Length));
+                }
+                else if (Directory.Exists(path))
+                {
+                    var dirInfo = new DirectoryInfo(path);
+                    fileSystemItems.Add(new FileSystemItem(dirInfo.Name, dirInfo.FullName,
+                        "Folder", "\xE8D7", dirInfo.LastWriteTimeUtc, 0));
+                }
+                else
+                {
+                    Debug.WriteLine($"LaunchCreateArchiveDialogWithFilePathsAsync: Path not found or invalid: {path}");
+                    // Optionally skip or add a placeholder error item
+                }
+            }
+
+            if (!fileSystemItems.Any())
+            {
+                await ShowMessageDialog("No Valid Items", "Could not process the selected items for archiving.");
+                return;
+            }
+
+            var dialog = new CreateArchiveDialog();
+            dialog.InitializeDialog(fileSystemItems); // Pass items for context
+            dialog.XamlRoot = this.Content.XamlRoot;
+
+            ContentDialogResult result = await dialog.ShowAsync();
+
+            if (result == ContentDialogResult.Primary)
+            {
+                // Use the original string paths for the compression service
+                await ProcessArchiveCreation(dialog, filePaths.ToList());
+            }
+            else
+            {
+                Debug.WriteLine("CreateArchiveDialog (from CLI path) was cancelled or closed.");
+            }
+        }
+
 
         private async void LoadInitialDirectory()
         {
@@ -259,15 +324,11 @@ namespace Unpack
                 else if (selectedItem.ItemType != "Error")
                 {
                     Debug.WriteLine($"File double-tapped: {selectedItem.FullPath}. Checking if it's an archive.");
-                    // If it's an archive file, could open it in Unpack itself (later feature)
-                    // or if it's a non-archive, try to launch it.
                     string fileExtension = Path.GetExtension(selectedItem.FullPath).ToLowerInvariant();
-                    if (fileExtension == ".zip" || fileExtension == ".7z") // Add other supported types
+                    if (fileExtension == ".zip" || fileExtension == ".7z")
                     {
-                        // TODO: Implement opening archive within Unpack (e.g. load its contents into FileListView)
                         ShowMessageDialog("Open Archive", $"'{selectedItem.Name}' would be opened in Unpack here. (Not yet implemented)");
                     }
-                    // else { LaunchFile(selectedItem.FullPath); } // Conceptual: Launch non-archive files
                 }
             }
         }
@@ -305,25 +366,8 @@ namespace Unpack
                 if (items.Count > 0)
                 {
                     Debug.WriteLine($"Dropped {items.Count} items onto MainContentGrid. First: {items[0].Path}");
-                    var fileSystemItems = new List<FileSystemItem>();
-                    var pathsToArchive = new List<string>();
-                    foreach(var item in items)
-                    {
-                        fileSystemItems.Add(new FileSystemItem(item.Name, item.Path, item.IsOfType(StorageItemTypes.Folder) ? "Folder" : "File",
-                                                               item.IsOfType(StorageItemTypes.Folder) ? "\xE8D7" : "\xE7C3",
-                                                               DateTimeOffset.Now));
-                        pathsToArchive.Add(item.Path);
-                    }
-
-                    var dialog = new CreateArchiveDialog();
-                    dialog.InitializeDialog(fileSystemItems);
-                    dialog.XamlRoot = this.Content.XamlRoot;
-
-                    ContentDialogResult result = await dialog.ShowAsync();
-                    if (result == ContentDialogResult.Primary)
-                    {
-                        await ProcessArchiveCreation(dialog, pathsToArchive);
-                    }
+                    var pathsToProcess = items.Select(i => i.Path).ToList();
+                    await LaunchCreateArchiveDialogWithFilePathsAsync(pathsToProcess);
                 }
             }
         }
@@ -344,28 +388,17 @@ namespace Unpack
                 await ShowMessageDialog("No Files Selected", "Please select files or folders to compress.");
                 return;
             }
-
-            var pathsToArchive = selectedUiItems.Select(item => item.FullPath).ToList();
-
-            var dialog = new CreateArchiveDialog();
-            dialog.InitializeDialog(selectedUiItems);
-            dialog.XamlRoot = this.Content.XamlRoot;
-
-            ContentDialogResult result = await dialog.ShowAsync();
-
-            if (result == ContentDialogResult.Primary)
-            {
-                await ProcessArchiveCreation(dialog, pathsToArchive);
-            }
-            else
-            {
-                Debug.WriteLine("CreateArchiveDialog was cancelled or closed.");
-            }
+            await LaunchCreateArchiveDialogWithFilePathsAsync(selectedUiItems.Select(item => item.FullPath));
         }
 
         private async Task ProcessArchiveCreation(CreateArchiveDialog dialog, List<string> sourcePaths)
         {
             Debug.WriteLine($"Attempting to create archive: {dialog.ArchiveFullName}");
+            if (sourcePaths == null || !sourcePaths.Any())
+            {
+                await ShowMessageDialog("Error", "No source files were provided for archive creation.");
+                return;
+            }
             try
             {
                 string outputArchivePath = dialog.ArchiveFullName;
@@ -420,7 +453,7 @@ namespace Unpack
 
             var openPicker = new FileOpenPicker();
             openPicker.FileTypeFilter.Add(".zip");
-            openPicker.FileTypeFilter.Add(".7z"); // Added .7z
+            openPicker.FileTypeFilter.Add(".7z");
             InitializeWithWindow.Initialize(openPicker, App.WindowHandle);
 
             StorageFile archiveFile = await openPicker.PickSingleFileAsync();
@@ -450,12 +483,11 @@ namespace Unpack
             ContentDialogResult passwordResult = await passwordDialog.ShowAsync();
             if (passwordResult == ContentDialogResult.Primary)
             {
-                password = passwordDialog.Password; // Will be empty if user entered nothing, null if cancelled.
+                password = passwordDialog.Password;
             }
-            else // Cancelled or dismissed
+            else
             {
                  Debug.WriteLine("Decompression: Password dialog was cancelled or dismissed. Proceeding without password.");
-                 // password remains null
             }
 
             Debug.WriteLine($"Attempting to extract '{archiveFile.Path}' to '{destinationFolder.Path}'. Password provided: {!string.IsNullOrEmpty(password)}");
