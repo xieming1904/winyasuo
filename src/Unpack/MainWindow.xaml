@@ -20,100 +20,127 @@
                     <KeyboardAccelerator Modifiers="Control" Key="N"/>
                 </AppBarButton.KeyboardAccelerators>
             </AppBarButton>
-            <AppBarButton x:Name="DecompressButton" Icon="OpenFile" Label="Decompress" Click="DecompressButton_Click">
+            <AppBarButton x:Name="DecompressButton" Icon="FolderOpen" Label="Decompress" Click="DecompressButton_Click">
                 <AppBarButton.KeyboardAccelerators>
                     <KeyboardAccelerator Modifiers="Control" Key="O"/>
                 </AppBarButton.KeyboardAccelerators>
             </AppBarButton>
             <AppBarSeparator/>
+            <AppBarButton x:Name="TestArchiveButton" Icon="Scan" Label="Test Archive" Click="TestArchiveButton_Click" IsEnabled="False"/>
+            <AppBarButton x:Name="RepairArchiveButton" Icon="Repair" Label="Repair Archive" Click="RepairArchiveButton_Click" IsEnabled="False"/>
 
             <CommandBar.Content>
-                <Grid HorizontalAlignment="Right" Width="Auto">
-                     <AppBarButton x:Name="SettingsButton" Icon="Setting" Label="Settings" HorizontalAlignment="Right" Click="SettingsButton_Click"/>
+                <Grid HorizontalAlignment="Stretch">
+                    <AppBarToggleButton x:Name="TogglePreviewPaneButton"
+                                          Icon="Preview"
+                                          Label="Toggle Preview"
+                                          Click="TogglePreviewPaneButton_Click"
+                                          HorizontalAlignment="Right"
+                                          Margin="0,0,12,0"/>
                 </Grid>
             </CommandBar.Content>
+            <CommandBar.SecondaryCommands>
+                <AppBarButton x:Name="SettingsButton" Icon="Setting" Label="Settings" Click="SettingsButton_Click"/>
+            </CommandBar.SecondaryCommands>
         </CommandBar>
 
-        <!-- Main Content Area - File Browser -->
-        <Grid Grid.Row="1" Margin="12">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/> <!-- Address Bar -->
-                <RowDefinition Height="*"/>   <!-- File/Folder List -->
-            </Grid.RowDefinitions>
+        <!-- Main Content Area - File Browser & Preview Pane -->
+        <Grid Grid.Row="1" Margin="12" x:Name="MainAppGrid">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="250"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="320" x:Name="PreviewColumn" MinWidth="0"/>
+            </Grid.ColumnDefinitions>
 
-            <!-- Address Bar -->
-            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="5" Margin="0,0,0,8">
-                <Button x:Name="UpButton" FontFamily="Segoe Fluent Icons" Content="&#xE74A;" ToolTipService.ToolTip="Up one level" Click="UpButton_Click" Padding="8,4,8,4"/>
-                <TextBox x:Name="PathTextBox" MinWidth="300" HorizontalAlignment="Stretch" VerticalAlignment="Center" KeyDown="PathTextBox_KeyDown"/>
-                <Button x:Name="GoButton" Content="Go" ToolTipService.ToolTip="Navigate to path" Click="GoButton_Click" Padding="8,4,8,4"/>
-            </StackPanel>
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
 
-            <!-- File/Folder List -->
-            <ListView
-                x:Name="FileListView"
-                Grid.Row="1"
-                SelectionMode="Extended"
-                DoubleTapped="FileListView_DoubleTapped"
-                CanDragItems="True"
-                CanReorderItems="False"
-                AllowDrop="True"
-                ContainerContentChanging="FileListView_ContainerContentChanging">
-                <!-- DragEnter="FileListView_DragEnter"
-                     DragOver="FileListView_DragOver"
-                     DragLeave="FileListView_DragLeave"
-                     Drop="FileListView_Drop" -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="5" Margin="0,0,0,8">
+                    <Button x:Name="UpButton" FontFamily="Segoe Fluent Icons" Content="&#xE74A;" ToolTipService.ToolTip="Up one level" Click="UpButton_Click" Padding="8,4,8,4"/>
+                    <TextBox x:Name="PathTextBox" MinWidth="200" HorizontalAlignment="Stretch" VerticalAlignment="Center" KeyDown="PathTextBox_KeyDown" TextChanged="PathTextBox_TextChanged"/>
+                    <Button x:Name="GoButton" Content="Go" ToolTipService.ToolTip="Navigate to path" Click="GoButton_Click" Padding="8,4,8,4"/>
+                </StackPanel>
 
-                <ListView.ItemContainerStyle>
-                    <Style TargetType="ListViewItem">
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                    </Style>
-                </ListView.ItemContainerStyle>
+                <ListView
+                    x:Name="FileListView"
+                    Grid.Row="1"
+                    SelectionMode="Extended"
+                    DoubleTapped="FileListView_DoubleTapped"
+                    SelectionChanged="FileListView_SelectionChanged"
+                    CanDragItems="True"
+                    CanReorderItems="False"
+                    AllowDrop="True"
+                    ContainerContentChanging="FileListView_ContainerContentChanging">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.HeaderTemplate>
+                        <DataTemplate>
+                            <Grid Padding="0,0,0,4" Background="{ThemeResource LayerFillColorDefaultBrush}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="180"/>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="100"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="1" Text="Name" Style="{ThemeResource CaptionTextBlockStyle}" FontWeight="SemiBold" Margin="12,0,0,0"/>
+                                <TextBlock Grid.Column="2" Text="Date Modified" Style="{ThemeResource CaptionTextBlockStyle}" FontWeight="SemiBold"/>
+                                <TextBlock Grid.Column="3" Text="Type" Style="{ThemeResource CaptionTextBlockStyle}" FontWeight="SemiBold"/>
+                                <TextBlock Grid.Column="4" Text="Size" Style="{ThemeResource CaptionTextBlockStyle}" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.HeaderTemplate>
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="local:FileSystemItem">
+                            <Grid HorizontalAlignment="Stretch" Padding="0,4,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="180"/>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="100"/>
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Grid.Column="0" FontFamily="Segoe Fluent Icons" Glyph="{x:Bind Icon}" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="{x:Bind Name}" Style="{ThemeResource BodyTextBlockStyle}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind Name}"/>
+                                <TextBlock Grid.Column="2" Text="{x:Bind DisplayDateModified}" Style="{ThemeResource BodyTextBlockStyle}" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="3" Text="{x:Bind DisplayItemType}" Style="{ThemeResource BodyTextBlockStyle}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Grid.Column="4" Text="{x:Bind DisplaySize}" Style="{ThemeResource BodyTextBlockStyle}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+                <TextBlock x:Name="DragDropHintText" Grid.Row="1"
+                           Text="Drag and drop files/folders here"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Margin="20" Opacity="0.6" FontSize="16"
+                           Style="{ThemeResource SubtitleTextBlockStyle}"
+                           Visibility="Collapsed"/>
+            </Grid>
 
-                <ListView.HeaderTemplate>
-                    <DataTemplate>
-                        <Grid Padding="0,0,0,4" Background="{ThemeResource LayerFillColorDefaultBrush}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/> <!-- Icon -->
-                                <ColumnDefinition Width="*"/>   <!-- Name -->
-                                <ColumnDefinition Width="180"/> <!-- Date Modified -->
-                                <ColumnDefinition Width="120"/> <!-- Type -->
-                                <ColumnDefinition Width="100"/> <!-- Size -->
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="1" Text="Name" Style="{ThemeResource CaptionTextBlockStyle}" FontWeight="SemiBold" Margin="12,0,0,0"/>
-                            <TextBlock Grid.Column="2" Text="Date Modified" Style="{ThemeResource CaptionTextBlockStyle}" FontWeight="SemiBold"/>
-                            <TextBlock Grid.Column="3" Text="Type" Style="{ThemeResource CaptionTextBlockStyle}" FontWeight="SemiBold"/>
-                            <TextBlock Grid.Column="4" Text="Size" Style="{ThemeResource CaptionTextBlockStyle}" FontWeight="SemiBold" HorizontalAlignment="Right"/>
-                        </Grid>
-                    </DataTemplate>
-                </ListView.HeaderTemplate>
+            <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="Transparent" ResizeBehavior="BasedOnAlignment" ResizeDirection="Columns"/>
 
-                <ListView.ItemTemplate>
-                    <DataTemplate x:DataType="local:FileSystemItem">
-                        <Grid HorizontalAlignment="Stretch" Padding="0,4,0,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/> <!-- Icon -->
-                                <ColumnDefinition Width="*"/>   <!-- Name -->
-                                <ColumnDefinition Width="180"/> <!-- Date Modified -->
-                                <ColumnDefinition Width="120"/> <!-- Type -->
-                                <ColumnDefinition Width="100"/> <!-- Size -->
-                            </Grid.ColumnDefinitions>
-
-                            <FontIcon Grid.Column="0" FontFamily="Segoe Fluent Icons" Glyph="{x:Bind Icon}" Margin="0,0,12,0" VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="1" Text="{x:Bind Name}" Style="{ThemeResource BodyTextBlockStyle}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Grid.Column="2" Text="{x:Bind DisplayDateModified}" Style="{ThemeResource BodyTextBlockStyle}" VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="3" Text="{x:Bind DisplayItemType}" Style="{ThemeResource BodyTextBlockStyle}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Grid.Column="4" Text="{x:Bind DisplaySize}" Style="{ThemeResource BodyTextBlockStyle}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                        </Grid>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
-            <TextBlock x:Name="DragDropHintText" Grid.Row="1"
-                       Text="Drag and drop files/folders here"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"
-                       Margin="20" Opacity="0.6" FontSize="16"
-                       Style="{ThemeResource SubtitleTextBlockStyle}"
-                       Visibility="Collapsed"/>
+            <Grid Grid.Column="2" x:Name="PreviewPane" Background="{ThemeResource LayerOnMicaFillColorDefaultBrush}" Visibility="Collapsed" CornerRadius="{ThemeResource ControlCornerRadius}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="12">
+                    <StackPanel Spacing="8">
+                        <TextBlock x:Name="PreviewFileNameText" Style="{ThemeResource SubtitleTextBlockStyle}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"/>
+                        <Image x:Name="PreviewImage" Stretch="Uniform" MaxHeight="400" Visibility="Collapsed" HorizontalAlignment="Center"/>
+                        <Border x:Name="PreviewTextBorder" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" CornerRadius="{ThemeResource ControlCornerRadius}" Padding="8" Visibility="Collapsed">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="400">
+                                 <TextBlock x:Name="PreviewTextContent" TextWrapping="Wrap" FontFamily="Consolas" Style="{ThemeResource BodyTextBlockStyle}"/>
+                            </ScrollViewer>
+                        </Border>
+                        <TextBlock x:Name="PreviewStatusText" Text="Select a file to preview." Visibility="Visible" HorizontalAlignment="Center" VerticalAlignment="Center" Style="{ThemeResource BodyTextBlockStyle}"/>
+                         <ProgressRing x:Name="PreviewLoadingRing" IsActive="False" HorizontalAlignment="Center" VerticalAlignment="Center" Width="40" Height="40" Margin="20"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
         </Grid>
     </Grid>
 </Window>
